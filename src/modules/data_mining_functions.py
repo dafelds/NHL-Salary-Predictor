@@ -14,7 +14,7 @@ def parse_player_code(athletes, return_info = None):
     Parameters
     ----------
     athletes: string or list of sportipy-generated player info
-    
+
     return_info: string, default None 
         options are: 'fname', 'lname', 'pcode', or None which returns [[fname, lname, pcode]]
     
@@ -23,24 +23,43 @@ def parse_player_code(athletes, return_info = None):
     string or list of strings of first name, last name, player code, or a list of all three
     """
     
-    if return_info == None:
-        if not isinstance(athletes, list):
-            return re.findall(r'\w+', str(athletes))
+    if not isinstance(athletes, list):
+        fname, *lname, pcode = re.findall(r'\S+', str(athletes))
+        pcode = pcode[1:-1]
+        player_info = {'fname': fname, 'lname': lname, 'pcode': pcode}
         
-        lst = []
+        if return_info == None:
+            return [fname, ' '.join(lname), pcode]
+        
+        return player_info[return_info]
+
+    lst = []
+    
+    if return_info == None:
         for athlete in athletes:
-            lst.append(re.findall(r'\w+', str(athlete)))
+            fname, *lname, pcode = re.findall(r'\S+', str(athlete))
+            pcode = pcode[1:-1]
+            lst.append([fname, ' '.join(lname), pcode])
         return lst
     
-    player_info = {'fname': 0, 'lname': 1, 'pcode': 2}
+    if return_info == 'fname':
+        for athlete in athletes:
+            fname = re.findall(r'\S+', str(athlete))[0]
+            lst.append(fname)
+        return lst
     
-    if not isinstance(athletes, list):
-        return re.findall(r'\w+', str(athletes))[player_info[return_info]]
+    if return_info == 'lname':
+        for athlete in athletes:
+            lname = re.findall(r'\S+', str(athlete))[1:-1]
+            lst.append(' '.join(lname))
+        return lst
     
-    lst = []
-    for athlete in athletes:
-        lst.append(re.findall(r'\w+', str(athlete))[player_info[return_info]])
-    return lst
+    if return_info == 'pcode':
+        for athlete in athletes:
+            pcode = re.findall(r'\S+', str(athlete))[-1]
+            pcode = pcode[1:-1]
+            lst.append(pcode)
+        return lst
 
 
 def mine_player_position(player_code: str) -> str:
@@ -123,46 +142,60 @@ def build_player_stats_df(to_csv = False):
     
     team_list = [
         'ANA', 'ARI', 'BOS', 'BUF', 'CAR', 'CBJ', 'CGY', 'CHI',
-        'COL', 'DAL', 'DET', 'EDM', 'FLA', 'LAK', 'MIN', 'MTL',
+        'COL', 'DAL', 'DET', 'EDM', 'FLA', 'LAK', 'MIN', 'MTL', 
         'NJD', 'NSH', 'NYI', 'NYR', 'OTT', 'PHI', 'PIT', 'SEA',
-        'SJS', 'STL', 'TBL', 'TOR', 'VAN', 'VGK', 'WPG', 'WSH'
+        'SJS', 'STL', 'TBL', 'TOR', 'VAN', 'VEG', 'WPG', 'WSH'
                 ]
     
     df = pd.DataFrame()
     error_teams = []
     error_players = []
-    pathway = 'data\\'
+    pathway = 'C:\\Users\\dfeld\\Documents\\Data Sci Course\\Course Work\\Final Project repo\\data\\'
+    file_names = [
+        'nhl_player_yearly_stats',
+        'error_teams',
+        'error_players'
+        ]
+    file_num = ['', '', '']
     
     assert os.path.isdir(pathway), "Folder doesn't exist"
+    
+    for i, file_name in enumerate(file_names):
+        while os.path.isfile(pathway + file_name + str(file_num[i]) + '.csv'):
+            try:
+                file_num[i] += 1
+            except TypeError:
+                file_num[i] = 1
+        print(file_num[i])
     
     for club in team_list:
         try:
             team_roster = teams.Roster(club, 2022)
             team_roster = set(team_roster.players)
-        except ValueError:
+        except:
             error_teams.append(club)
             continue
         
         for athlete in team_roster:
             try:
                 player_info = parse_player_code(athlete)
+                df = pd.concat([df, create_player_dataframe(player_code = player_info[2],
+                                                            first_name = player_info[0],
+                                                            last_name = player_info[1]
+                                                            )
+                                ])
             except:
                 error_players.append(athlete)
 
-            df = pd.concat([df, create_player_dataframe(
-                    player_code = player_info[2],
-                    first_name = player_info[0],
-                    last_name = player_info[1]
-                )]
-            )
+
     
     df = df.reset_index(drop = True)
 
-    df.to_csv(pathway + 'nhl_player_yearly_stats.csv')
+    df.to_csv(pathway + file_names[0] + str(file_num[0]) + '.csv')
     if error_teams:
-        pd.DataFrame(error_teams).to_csv(pathway + 'error_teams.csv')
+        pd.DataFrame(error_teams).to_csv(pathway + file_names[1] + str(file_num[1]) + '.csv')
     if error_players:
-        pd.DataFrame(error_players).to_csv(pathway + 'error_players.csv')
+        pd.DataFrame(error_players).to_csv(pathway + file_names[2] + str(file_num[2]) + '.csv')
 
 
 if __name__ == '__main__':
