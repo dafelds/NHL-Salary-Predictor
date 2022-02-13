@@ -150,7 +150,7 @@ def build_player_stats_df(to_csv = False):
     df = pd.DataFrame()
     error_teams = []
     error_players = []
-    pathway = 'C:\\Users\\dfeld\\Documents\\Data Sci Course\\Course Work\\Final Project repo\\data\\'
+    pathway = '../../data/'
     file_names = [
         'nhl_player_yearly_stats',
         'error_teams',
