@@ -5,6 +5,7 @@ import requests
 
 from bs4 import BeautifulSoup as bs
 from sportsipy.nhl import player, roster, teams
+from datetime import date
 
 
 def parse_player_code(athletes, return_info = None):
@@ -127,13 +128,56 @@ def create_player_dataframe(player_code: str, position = True, first_name = None
     return df
 
 
-def build_player_stats_df(to_csv = False):
+def mine_player_salary(first_name: str, last_name: str):
     """
-    Compiles a dataframe of yearly stats of all current NHL players from sportsipy.
+    Compiles a dataframe of the player's seasonal salary across their career,
+    as well as whether or not a new contract came into effect.
     
     Parameters
     ----------
-    to_csv: bool, if True create a csv in the data folder
+    first_name: str
+        player's first name
+        
+    last_name: str
+        player's last name
+    
+    Returns
+    ----------
+    pandas DataFrame of the season, the player's salary for that season, whether it was a new contract.
+    """    
+    
+    full_name = first_name + '-' + last_name
+    full_name = ''.join([char for char in full_name if char != '.'])
+    full_name = '-'.join(full_name.split(sep = ' ')).lower()
+    
+    url = f'https://www.capfriendly.com/players/{full_name}'
+    page = requests.get(url)
+    soup = bs(page.content, 'html.parser')
+    
+    lst = []
+    for table in soup.find_all('div', class_ = 'table_c contract_cont'):
+        try:
+            contract_year = 1
+            table_body = table.find('tbody', id = 'cont_x')
+            for mod in ['odd', 'even']:
+                for row in table_body.find_all('tr', class_ = mod):
+                    lst.append((row.find('td', class_ = 'left').string, row.find_all('td', class_ = 'center')[2].string, contract_year))
+                    contract_year = 0
+        except IndexError:
+            continue
+
+    df = pd.DataFrame(lst, columns=['season', 'AAV', 'contract_year'])
+    return df.sort_values('season').reset_index(drop = True)
+
+
+def build_player_stats_df(year = 2022):
+    """
+    Compiles a dataframe of yearly stats of all current NHL players from sportsipy and exports to csv.
+    
+    Parameters
+    ----------
+    year: int, default 2022
+        the season roster for which the csv will be created.
     
     Returns
     ----------
@@ -150,11 +194,13 @@ def build_player_stats_df(to_csv = False):
     df = pd.DataFrame()
     error_teams = []
     error_players = []
-    pathway = '../../data/'
+    
+    dirname = os.path.dirname(__file__)
+    pathway = os.path.join(dirname, '../../data/')
     file_names = [
-        'nhl_player_yearly_stats',
-        'error_teams',
-        'error_players'
+        f'nhl_player_yearly_stats_{year}',
+        f'error_teams_{year}',
+        f'error_players_{year}'
         ]
     file_num = ['', '', '']
     
@@ -166,11 +212,10 @@ def build_player_stats_df(to_csv = False):
                 file_num[i] += 1
             except TypeError:
                 file_num[i] = 1
-        print(file_num[i])
     
     for club in team_list:
         try:
-            team_roster = teams.Roster(club, 2022)
+            team_roster = teams.Roster(club, year)
             team_roster = set(team_roster.players)
         except:
             error_teams.append(club)
@@ -198,5 +243,48 @@ def build_player_stats_df(to_csv = False):
         pd.DataFrame(error_players).to_csv(pathway + file_names[2] + str(file_num[2]) + '.csv')
 
 
+def concatenate_dataframes(start_year, end_year = int(date.today().year) + 1):
+    """
+    Concatenates all of the dataframes created in the build_player_stats_df function and exports to csv.
+    
+    Parameters
+    ----------
+    start_year: int
+        the earliest season roster for which player data was collected.
+
+    end_year: int, default current year + 1
+        the earliest season roster for which player data was collected.
+    
+    Returns
+    ----------
+    pandas DataFrame of the yearly stats of every player within the time range.
+    """
+
+    dirname = os.path.dirname(__file__)
+    pathway = os.path.join(dirname, '../../data/')
+    file_name = 'full_nhl_player_yearly_stats'
+    file_num = ''
+
+    while os.path.isfile(pathway + file_name + str(file_num) + '.csv'):
+        try:
+            file_num += 1
+        except TypeError:
+            file_num = 1
+    
+    assert os.path.isdir(pathway), "Folder doesn't exist"
+
+    raw = pd.DataFrame()
+    for year in range(2015, 2022):
+        raw = pd.concat([raw, pd.read_csv(f'data/nhl_player_yearly_stats_{year}.csv', index_col=0)])
+    raw.reset_index(drop = True, inplace = True)
+    raw.drop_duplicates(inplace = True)
+    raw.to_csv(pathway + file_name + str(file_num) + '.csv')
+
+
 if __name__ == '__main__':
-    build_player_stats_df()
+    start_year = 2015
+    end_year = 2022
+    for year in range(start_year, end_year + 1):
+        build_player_stats_df(year)
+    
+    concatenate_dataframes(start_year, end_year)
