@@ -1,5 +1,7 @@
 import pandas as pd
 
+from datetime import date
+
 def filter_position(df, position):
     """
     Distills the dataframe down to only the hockey positions selected.
@@ -23,7 +25,7 @@ def filter_position(df, position):
     return df[df['position'].isin(position)].reset_index(drop = True)
 
 
-def adjust_season_format(date):
+def adjust_season_format(season):
     """
     Changes the format of the date to the season's end year.
     
@@ -37,7 +39,10 @@ def adjust_season_format(date):
     string of the season's end year, format 20XX.
     """
     
-    return int(''.join('20' + date[-2:]))
+    year = int(season[-2:])
+    if 2000 + year <= int(date.today().year) + 1:
+        return 2000 + year
+    return 1900 + year
 
 
 def split_teams(df_copy):
@@ -145,6 +150,51 @@ def add_shifted_years(df_copy, n_years = 1):
     return df
 
 
+def percent_diff_rookie_year(df_copy):
+    """
+    Takes the percent difference of a player's performance against their rookie season in the league.
+    Note: a rookie season in the NHL is defined by the first season where the player played >25 games.
+    
+    Parameters
+    ----------
+    df: pandas DataFrame
+        the dataframe to standardize.
+        
+    Returns
+    ----------
+    pandas DataFrame where additional, standardized columns are created based on their rookie season's numeric columns.
+    """
+    
+    df = df_copy.copy()
+    numeric_categories = [df.columns[i] for i in range(len(df.columns)) if df[df.columns[i]].dtype.kind in ['i' ,'f']]
+    for category in ['season', 'age', 'games_played']:
+        try:
+            numeric_categories.remove(category)
+        except:
+            continue
+            
+    for category in numeric_categories:
+        df[f'{category}_percent_diff'] = df[category]
+    
+    numeric_categories_percent_diff = [f'{cat}_percent_diff' for cat in numeric_categories]
+    df_copy = df.copy()
+    
+    drop_list = []
+    
+    for i in range(len(df_copy)):
+        if i == 0 or df_copy.loc[i, 'player_code'] != df_copy.loc[i-1, 'player_code']:
+            k = 0
+        if df_copy.loc[i, 'games_played'] <= 25:
+            drop_list.append(i)
+            k += 1
+            continue
+        for j, category in enumerate(numeric_categories_percent_diff):
+            comparative_season = df_copy.loc[df_copy['player_code'] == df_copy.loc[i, 'player_code'], numeric_categories[j]].iloc[k]
+            df.loc[i, category] = (df_copy.loc[i, numeric_categories[j]] - comparative_season)/comparative_season
+    
+    return df.drop(drop_list).replace([np.inf, -np.inf], np.nan).dropna()
+
+
 def preprocessing_pipeline(df_copy):
     """
     Performs all the preprocessing on the data to prepare for entry in the machine learning model.
@@ -159,7 +209,8 @@ def preprocessing_pipeline(df_copy):
     pandas DataFrame with a reduced column set and adjusted values.
     """
     
-    df = df_copy.copy()    
+    df = df_copy.copy()
+    df = df.reset_index(drop = True)    
     df = filter_position(df, ['C', 'RW', 'LW', 'F', 'W'])
     df.season = df.season.apply(adjust_season_format)
     df = df[[
