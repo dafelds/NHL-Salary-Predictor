@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 
 from datetime import date
@@ -195,38 +196,89 @@ def percent_diff_rookie_year(df_copy):
     return df.drop(drop_list).replace([np.inf, -np.inf], np.nan).dropna()
 
 
-def preprocessing_pipeline(df_copy):
+def salary_df_preprocessor(df_copy):
+    """
+    Performs all the preprocessing on the salary data to prepare for merging with the player stats data.
+    
+    Parameters
+    ----------
+    df_copy: pandas DataFrame
+        the dataframe to filter.
+
+    Returns
+    ----------
+    pandas DataFrame with a the seasons and the AAV columns adjusted.
+    """
+    
+    df = df_copy.copy()
+    df.season = df.season.apply(adjust_season_format)
+    df.AAV = df.AAV.apply(lambda x: float(''.join([i for i in x[1:] if i != ',']))/1000000)
+    df = df.sort_values(['player_code', 'season']).reset_index(drop = True)
+    return df
+
+
+def merge_stats_salary_data(df_stats_copy, df_salary):
+    """
+    Concatenates all of the dataframes created in the build_player_stats_df function and exports to csv.
+    
+    Parameters
+    ----------
+    df_stats_copy: pandas DataFrame
+        player statistics dataframe
+
+    df_salary: pandas DataFrame
+        player salary dataframe.
+    
+    Returns
+    ----------
+    pandas DataFrame of the yearly stats of every player merged with their salaries.
+    """
+    
+    df_stats = df_stats_copy.copy()
+    df_salary = df_salary.drop(['first_name', 'last_name'], axis = 1)
+    df_salary = salary_df_preprocessor(df_salary)
+    return df_stats.merge(df_salary, on = ['player_code', 'season'])
+
+
+def preprocessing_pipeline(df_stats_copy, df_salary_copy = [False]):
     """
     Performs all the preprocessing on the data to prepare for entry in the machine learning model.
     
     Parameters
     ----------
-    df: pandas DataFrame
-        the dataframe to filter.
+    df_stats_copy: pandas DataFrame
+        the player stats dataframe to filter.
+
+    df_salary_copy: pandas DataFrame, default None
+        the player salary dataframe to filter and merge.
 
     Returns
     ----------
     pandas DataFrame with a reduced column set and adjusted values.
     """
     
-    df = df_copy.copy()
-    df = df.reset_index(drop = True)    
-    df = filter_position(df, ['C', 'RW', 'LW', 'F', 'W'])
-    df.season = df.season.apply(adjust_season_format)
-    df = df[[
+    df_stats = df_stats_copy.copy()
+    df_stats = df_stats.reset_index(drop = True)    
+    df_stats = filter_position(df_stats, ['C', 'RW', 'LW', 'F', 'W'])
+    df_stats.season = df_stats.season.apply(adjust_season_format)
+    df_stats = df_stats[[
         'season','first_name', 'last_name', 'player_code', 'age', 'team_abbreviation',
         'games_played', 'time_on_ice', 'points', 'goals', 'goals_created', 'assists',
         'giveaways', 'takeaways', 'hits_at_even_strength'
     ]]
     
-    df = stats_per_60_minutes(df)
-    df = df.drop(
+    df_stats = stats_per_60_minutes(df_stats)
+    df_stats = df_stats.drop(
         ['points', 'goals', 'goals_created', 'assists', 'giveaways', 'takeaways', 'hits_at_even_strength'],
         axis = 1
     )
     
-    df = add_shifted_years(df, 2)
-    df = df.dropna().reset_index(drop = True)
-#     df = split_teams(df)
+    df_stats = add_shifted_years(df_stats, 2)
+    df_stats = df_stats.dropna().reset_index(drop = True)
+#     df_stats = split_teams(df_stats)
+
+    if any(df_salary_copy):
+        df_salary = df_salary_copy.copy()
+        df_stats = merge_stats_salary_data(df_stats, df_salary)
     
-    return df
+    return df_stats
