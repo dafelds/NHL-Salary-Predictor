@@ -10,7 +10,7 @@ from tensorflow.keras import layers
 from sklearn.model_selection import train_test_split
 
 dirname = os.path.dirname(__file__)
-filename = os.path.join(dirname, '../../data/full_nhl_player_yearly_stats.csv')
+filename = os.path.join(dirname, '../data/full_nhl_player_yearly_stats.csv')
 
 raw = pd.read_csv(filename, index_col=0)
 df = data_processing_functions.preprocessing_pipeline(raw)
